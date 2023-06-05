@@ -9,6 +9,12 @@ import qualified Data.ByteString.Lazy as B
 data Place = Place { city :: String } deriving (Show, Generic)
 data Product = Product { title :: String } deriving (Show, Generic)
 
+data Trip = Trip { from        :: Place
+                 , to          :: Place
+                 , merchandise :: [Product] } deriving Show
+
+type Route = [Trip]
+
 instance FromJSON Place
 instance FromJSON Product
 
