@@ -6,7 +6,6 @@ import GHC.Generics
 import Data.Aeson
 import qualified Data.ByteString.Lazy as B
 import Test.QuickCheck 
-import System.Random
 import Test.QuickCheck.Gen (Gen(unGen))
 import Test.QuickCheck.Random (mkQCGen)
 
@@ -40,18 +39,24 @@ createRandomTrip :: Places -> Products -> Gen Trip
 createRandomTrip pls prs = do
   let plsLen = length pls
   fromIdx <- choose (0, plsLen-1)
-  toIdx   <- choose (0, plsLen-1)
-  let randomTrip =  Trip { fromCity = pls !! fromIdx, toCity = pls !! toIdx, merchandise = []}
+  toIdx   <- suchThat (choose (0, plsLen-1)) (/= fromIdx)
+  let randomTrip = Trip { fromCity = pls !! fromIdx, toCity = pls !! toIdx, merchandise = []}
   return randomTrip
 
-randomTrip :: Trip
-randomTrip = unGen (createRandomTrip testPlaces testProducts) (mkQCGen 3) 1
+randomTrip :: IO Trip
+randomTrip = do
+  (pls, prs) <- getPlacesAndProducts
+  return $ unGen (createRandomTrip pls prs) (mkQCGen 69) 1
 
-testPlaces :: Places
-testPlaces = [Place "Utrecht", Place "Amsterdam", Place "Arnheim", Place "Amersfoort"]
-
-testProducts :: Products
-testProducts = [Product "Milk", Product "Eggs", Product "Meat", Product "Cheese"]
+getPlacesAndProducts :: IO (Places, Products)
+getPlacesAndProducts = do
+  dpl <- (eitherDecode <$> getPlacesJSON) :: IO (Either String [Place])
+  dpr <- (eitherDecode <$> getProductsJSON) :: IO (Either String [Product])
+  case (dpl, dpr) of
+    (Left e1, Left e2)     -> error (e1 ++ e2)
+    (Left e1, _)           -> error e1
+    (_, Left e2)           -> error e2
+    (Right pls, Right prs) -> return (pls, prs)
 
 main :: IO ()
 main = do
