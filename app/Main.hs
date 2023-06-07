@@ -35,8 +35,18 @@ getPlacesJSON = B.readFile placesJsonFile
 getProductsJSON :: IO B.ByteString
 getProductsJSON = B.readFile productsJsonFile
 
-createRandomTrip :: Places -> Products -> Gen Trip
-createRandomTrip pls prs = do
+getPlacesAndProducts :: IO (Places, Products)
+getPlacesAndProducts = do
+  dpl <- (eitherDecode <$> getPlacesJSON) :: IO (Either String [Place])
+  dpr <- (eitherDecode <$> getProductsJSON) :: IO (Either String [Product])
+  case (dpl, dpr) of
+    (Left e1, Left e2)     -> error (e1 ++ e2)
+    (Left e1, _)           -> error e1
+    (_, Left e2)           -> error e2
+    (Right pls, Right prs) -> return (pls, prs)
+
+generateRandomTrip :: Places -> Products -> Gen Trip
+generateRandomTrip pls prs = do
   let plsLen = length pls
   fromIdx <- choose (0, plsLen-1)
   toIdx   <- suchThat (choose (0, plsLen-1)) (/= fromIdx)
@@ -49,17 +59,7 @@ createRandomTrip pls prs = do
 randomTrip :: Int -> IO Trip
 randomTrip seed = do
   (pls, prs) <- getPlacesAndProducts
-  return $ unGen (createRandomTrip pls prs) (mkQCGen seed) 42
-
-getPlacesAndProducts :: IO (Places, Products)
-getPlacesAndProducts = do
-  dpl <- (eitherDecode <$> getPlacesJSON) :: IO (Either String [Place])
-  dpr <- (eitherDecode <$> getProductsJSON) :: IO (Either String [Product])
-  case (dpl, dpr) of
-    (Left e1, Left e2)     -> error (e1 ++ e2)
-    (Left e1, _)           -> error e1
-    (_, Left e2)           -> error e2
-    (Right pls, Right prs) -> return (pls, prs)
+  return $ unGen (generateRandomTrip pls prs) (mkQCGen seed) 42
 
 main :: IO ()
 main = do
