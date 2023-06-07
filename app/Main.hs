@@ -40,13 +40,16 @@ createRandomTrip pls prs = do
   let plsLen = length pls
   fromIdx <- choose (0, plsLen-1)
   toIdx   <- suchThat (choose (0, plsLen-1)) (/= fromIdx)
-  let randomTrip = Trip { fromCity = pls !! fromIdx, toCity = pls !! toIdx, merchandise = []}
+  merchPs <- sublistOf prs
+  merchQs <- listOf (choose (1, 420 :: Int))
+  let merchs = zip merchPs merchQs
+  let randomTrip = Trip { fromCity = pls !! fromIdx, toCity = pls !! toIdx, merchandise = merchs}
   return randomTrip
 
-randomTrip :: IO Trip
-randomTrip = do
+randomTrip :: Int -> IO Trip
+randomTrip seed = do
   (pls, prs) <- getPlacesAndProducts
-  return $ unGen (createRandomTrip pls prs) (mkQCGen 69) 1
+  return $ unGen (createRandomTrip pls prs) (mkQCGen seed) 42
 
 getPlacesAndProducts :: IO (Places, Products)
 getPlacesAndProducts = do
