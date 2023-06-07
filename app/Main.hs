@@ -51,23 +51,28 @@ generateRandomTrip pls prs = do
   fromIdx <- choose (0, plsLen-1)
   toIdx   <- suchThat (choose (0, plsLen-1)) (/= fromIdx)
   merchPs <- suchThat (sublistOf prs) (not . null)
-  merchQs <- suchThat (listOf (choose (1, 420 :: Int))) (not . null)
+  merchQs <- listOf1 (choose (1, 420 :: Int))
   let merchs = zip merchPs merchQs
   let randomTrip = Trip { fromCity = pls !! fromIdx, toCity = pls !! toIdx, merchandise = merchs}
   return randomTrip
 
 generateStandardRoute :: Places -> Products -> Gen Route
-generateStandardRoute pls prs = listOf (generateRandomTrip pls prs)
+generateStandardRoute pls prs = suchThat (listOf1 (generateRandomTrip pls prs)) sameToFromPred
+  where
+    sameToFromPred :: Route -> Bool
+    sameToFromPred []           = True
+    sameToFromPred [x]          = True
+    sameToFromPred (x : y : xs) = 
+      let
+        toOfX   = city $ toCity x
+        fromOfY = city $ fromCity y
+      in
+        toOfX == fromOfY && sameToFromPred (y : xs)
 
 randomStandardRoute :: Int -> IO Route
 randomStandardRoute seed = do
   (pls, prs) <- getPlacesAndProducts
   return $ unGen (generateStandardRoute pls prs) (mkQCGen seed) 5
-
-randomTrip :: Int -> IO Trip
-randomTrip seed = do
-  (pls, prs) <- getPlacesAndProducts
-  return $ unGen (generateRandomTrip pls prs) (mkQCGen seed) 42
 
 main :: IO ()
 main = do
