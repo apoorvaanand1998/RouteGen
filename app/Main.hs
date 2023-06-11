@@ -5,12 +5,12 @@ module Main where
 import GHC.Generics
 import Data.Aeson
 import qualified Data.ByteString.Lazy as B
-import Test.QuickCheck 
+import Test.QuickCheck
 import Test.QuickCheck.Gen (Gen(unGen))
 import Test.QuickCheck.Random (mkQCGen)
 
-data Place = Place { city :: String } deriving (Show, Generic)
-data Product = Product { title :: String } deriving (Show, Generic)
+data Place = Place { city :: String } deriving (Eq, Show, Generic)
+data Product = Product { title :: String } deriving (Eq, Show, Generic)
 
 data Trip = Trip { fromCity    :: Place
                  , toCity      :: Place
@@ -56,18 +56,36 @@ generateRandomTrip pls prs = do
   let randomTrip = Trip { fromCity = pls !! fromIdx, toCity = pls !! toIdx, merchandise = merchs}
   return randomTrip
 
+generateRandomPlace :: Places -> Places -> Gen (Place, Places)
+generateRandomPlace allPlaces alreadyPlaces = do
+  let plsLen = length allPlaces
+  newPlace <- elements allPlaces `suchThat` (`notElem` alreadyPlaces)
+  return (newPlace, newPlace : alreadyPlaces)
+
+generateNextTrip :: Places -> Products -> Places -> Trip -> Gen (Trip, Places)
+generateNextTrip pls prs alreadyPlaces seedTrip = do
+  let alreadyPlaces' = alreadyPlaces ++ [fromCity seedTrip, toCity seedTrip]
+  (nextToCity, alreadyPlaces'') <- generateRandomPlace pls alreadyPlaces'
+  merchPs <- suchThat (sublistOf prs) (not . null)
+  merchQs <- listOf1 (choose (1, 420 :: Int))
+  let merchs = zip merchPs merchQs
+  let prevMerch = merchandise seedTrip
+  merchs' <- oneof [suchThat (sublistOf prevMerch) (not . null), suchThat (sublistOf (prevMerch ++ merchs)) (not . null) ]
+  let nextTrip = Trip { fromCity = toCity seedTrip, toCity = nextToCity, merchandise = merchs'}
+  return (nextTrip, alreadyPlaces'')
+
 generateStandardRoute :: Places -> Products -> Gen Route
-generateStandardRoute pls prs = suchThat (listOf1 (generateRandomTrip pls prs)) sameToFromPred
+generateStandardRoute pls prs = do
+  seedTrip <- generateRandomTrip pls prs
+  times <- choose (3, 10)
+  helperRes <- generateStandardRoute' times [] seedTrip [seedTrip]
+  return $ reverse $ fst helperRes
   where
-    sameToFromPred :: Route -> Bool
-    sameToFromPred []           = True
-    sameToFromPred [x]          = True
-    sameToFromPred (x : y : xs) = 
-      let
-        toOfX   = city $ toCity x
-        fromOfY = city $ fromCity y
-      in
-        toOfX == fromOfY && sameToFromPred (y : xs)
+    generateStandardRoute' :: Int -> Places -> Trip -> Route -> Gen (Route, Places)
+    generateStandardRoute' 0 alreadyPlaces _ route            = return (route, alreadyPlaces)
+    generateStandardRoute' n alreadyPlaces seedTrip prevRoute = do
+      (nextTrip, alreadyPlaces') <- generateNextTrip pls prs alreadyPlaces seedTrip
+      generateStandardRoute' (n-1) alreadyPlaces' nextTrip (nextTrip : prevRoute)
 
 randomStandardRoute :: Int -> IO Route
 randomStandardRoute seed = do
