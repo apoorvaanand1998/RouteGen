@@ -1,4 +1,5 @@
 {-#LANGUAGE DeriveGeneric #-}
+{-#LANGUAGE FlexibleInstances #-}
 
 module Main where
 
@@ -14,7 +15,7 @@ data Product = Product { title :: String } deriving (Eq, Show, Generic)
 
 data Trip = Trip { fromCity    :: Place
                  , toCity      :: Place
-                 , merchandise :: [(Product, Int)] } deriving Show
+                 , merchandise :: [(Product, Int)] } deriving (Show, Generic)
 
 type Route    = [Trip]
 type Places   = [Place]
@@ -22,12 +23,21 @@ type Products = [Product]
 
 instance FromJSON Place
 instance FromJSON Product
+instance ToJSON Place
+instance ToJSON Product
+instance ToJSON Trip
 
 placesJsonFile :: FilePath
 placesJsonFile = "places.json"
 
 productsJsonFile :: FilePath
 productsJsonFile = "products.json"
+
+testRouteJsonFile :: FilePath
+testRouteJsonFile = "testRoute.json"
+
+createTest :: Route -> IO ()
+createTest = encodeFile testRouteJsonFile
 
 getPlacesJSON :: IO B.ByteString
 getPlacesJSON = B.readFile placesJsonFile
@@ -86,6 +96,18 @@ generateStandardRoute pls prs = do
     generateStandardRoute' n alreadyPlaces seedTrip prevRoute = do
       (nextTrip, alreadyPlaces') <- generateNextTrip pls prs alreadyPlaces seedTrip
       generateStandardRoute' (n-1) alreadyPlaces' nextTrip (nextTrip : prevRoute)
+
+getAlreadyPlaces :: Route -> Places
+getAlreadyPlaces = undefined 
+
+generateActualRoute :: Places -> Products -> Route -> Gen Route
+generateActualRoute pls prs stdRoute = do
+  nAddTrips <- choose (2, 5 :: Int)
+  tripAddIndices <- vectorOf nAddTrips (choose (0, length stdRoute - 1))
+  return []
+  where
+    addTrips :: [Int] -> Route -> Route
+    addTrips addIndices r = undefined
 
 randomStandardRoute :: Int -> IO Route
 randomStandardRoute seed = do
