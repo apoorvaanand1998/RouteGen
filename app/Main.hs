@@ -12,14 +12,16 @@ import Test.QuickCheck.Random (mkQCGen)
 
 data Place = Place { city :: String } deriving (Eq, Show, Generic)
 data Product = Product { title :: String } deriving (Eq, Show, Generic)
+type Places   = [Place]
+type Products = [Product]
 
 data Trip = Trip { fromCity    :: Place
                  , toCity      :: Place
                  , merchandise :: [(Product, Int)] } deriving (Eq, Show, Generic)
 
-newtype Route = Route { theRoute :: [Trip] } deriving (Eq, Show, Generic)
-type Places   = [Place]
-type Products = [Product]
+newtype Route  = Route { theRoute :: [Trip] } deriving (Eq, Show, Generic)
+data RoutePair = RoutePair { standardRoute :: Route 
+                           , actualRoute   :: Route } deriving (Eq, Show, Generic)
 
 instance FromJSON Place
 instance FromJSON Product
@@ -106,11 +108,10 @@ generateActualRoute pls prs stdRoute = do
   n <- choose (2, 5 :: Int)
   merchChangeIs <- vectorOf n (choose (0, length (theRoute stdRoute) - 1))
   merchChangedRoute <- changeMerch merchChangeIs stdRoute
-  tripChangeIs <- vectorOf n (choose (0, length (theRoute merchChangedRoute) - 1))
+  tripChangeIs <- vectorOf n (choose (0, length (theRoute merchChangedRoute) - 3))
   tripChangedRoute <- changeTrip tripChangeIs merchChangedRoute
-  tripAddIs <- vectorOf n (choose (0, length (theRoute tripChangedRoute) - 1))
+  tripAddIs <- vectorOf n (choose (0, length (theRoute tripChangedRoute ) - 2))
   addTrips tripAddIs tripChangedRoute
-
   where
     insertAt :: Int -> Trip -> [Trip] -> [Trip]
     insertAt i t before = take i before ++ t : drop i before
@@ -161,10 +162,16 @@ generateActualRoute pls prs stdRoute = do
           trips''   = changeAt (x+1) nextTrip' trips'
       changeTrip xs (Route trips'')
 
-randomStandardRoute :: Int -> IO Route
-randomStandardRoute seed = do
+generateRoutePair :: Places -> Products -> Gen RoutePair
+generateRoutePair pls prs = do
+  stdRoute <- generateStandardRoute pls prs
+  actRoute <- generateActualRoute pls prs stdRoute
+  return $ RoutePair stdRoute actRoute
+
+randomRoutePair :: Int -> IO RoutePair
+randomRoutePair seed = do
   (pls, prs) <- getPlacesAndProducts
-  return $ unGen (generateStandardRoute pls prs) (mkQCGen seed) 5
+  return $ unGen (generateRoutePair pls prs) (mkQCGen seed) 5
 
 main :: IO ()
 main = do
