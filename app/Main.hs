@@ -103,12 +103,63 @@ getAlreadyPlaces r = foldr (\ x -> (++) [fromCity x, toCity x]) [] (theRoute r)
 
 generateActualRoute :: Places -> Products -> Route -> Gen Route
 generateActualRoute pls prs stdRoute = do
-  nAddTrips <- choose (2, 5 :: Int)
-  tripAddIndices <- vectorOf nAddTrips (choose (0, length stdRoute - 1))
-  return []
+  n <- choose (2, 5 :: Int)
+  merchChangeIs <- vectorOf n (choose (0, length (theRoute stdRoute) - 1))
+  merchChangedRoute <- changeMerch merchChangeIs stdRoute
+  tripChangeIs <- vectorOf n (choose (0, length (theRoute merchChangedRoute) - 1))
+  tripChangedRoute <- changeTrip tripChangeIs merchChangedRoute
+  tripAddIs <- vectorOf n (choose (0, length (theRoute tripChangedRoute) - 1))
+  addTrips tripAddIs tripChangedRoute
+
   where
-    addTrips :: [Int] -> Route -> Route
-    addTrips addIndices r = undefined 
+    insertAt :: Int -> Trip -> [Trip] -> [Trip]
+    insertAt i t before = take i before ++ t : drop i before
+
+    changeAt :: Int -> Trip -> [Trip] -> [Trip]
+    changeAt i t before = take i before ++ t : drop (i+1) before
+
+    addTrips :: [Int] -> Route -> Gen Route
+    addTrips []       r = return r
+    addTrips (x : xs) r = do
+      let route      = theRoute r
+          tripSeeded = route !! x
+      (newTrip, alreadyPlaces) <- generateNextTrip pls prs (getAlreadyPlaces r) tripSeeded
+      let route'  = insertAt (x+1) newTrip route
+          trip'   = route' !! (x+2)
+          trip''  = trip' { fromCity = toCity newTrip }
+          route'' = changeAt (x+2) trip'' route'
+      return $ Route route''
+
+    changeMerch :: [Int] -> Route -> Gen Route
+    changeMerch []       r = return r
+    changeMerch (x : xs) r = do
+      let trip  = theRoute r !! x
+          m     = merchandise trip
+          asIs  = return m :: Gen [(Product, Int)]
+      merchPs <- suchThat (sublistOf prs) (not . null)
+      merchQs <- listOf1 (choose (1, 420 :: Int))
+      let extraM       = zip merchPs merchQs
+          strictlyMore = return (m ++ extraM) :: Gen [(Product, Int)]
+          someOfPrev   = suchThat (sublistOf m) (not . null)
+          mix          = suchThat (sublistOf (m ++ extraM)) (not . null)
+      poss <- oneof [asIs, strictlyMore, someOfPrev, mix]
+      let trip' = trip { merchandise = poss }
+          r'    = Route $ changeAt x trip' (theRoute r)
+      changeMerch xs r'
+
+    changeTrip :: [Int] -> Route -> Gen Route
+    changeTrip [] r       = return r
+    changeTrip (x : xs) r = do
+      let alreadyPlaces = getAlreadyPlaces r
+      (newPlace, _) <- generateRandomPlace pls alreadyPlaces
+      let trips     = theRoute r
+          currTrip  = trips !! x
+          nextTrip  = trips !! (x+1)
+          currTrip' = currTrip { toCity = newPlace }
+          nextTrip' = nextTrip { fromCity = newPlace }
+          trips'    = changeAt x currTrip' trips
+          trips''   = changeAt (x+1) nextTrip' trips'
+      changeTrip xs (Route trips'')
 
 randomStandardRoute :: Int -> IO Route
 randomStandardRoute seed = do

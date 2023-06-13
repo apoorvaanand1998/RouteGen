@@ -1,0 +1,97 @@
+Okay, so I have to first create a set of standard routes
+
+What does a route look like?
+
+It contains a "from" and a "to" and a list of merchandise of random
+quantities
+
+Right
+
+So I guess I need to first just find a list of merchandise and a list of places
+in the Netherlands
+
+I didn't want to copy-paste a list. That's ugly
+
+So I want to use a places.json list that I found and I want to decode that json
+into a Haskell datatype that is the list of the places
+
+First I define a datatype that corresponds to the JSON structure
+
+Okay, so I was able to decode the JSON into a [Place], it's kinda ugly but
+who cares about perfection for this, yeah?
+
+Next thing I need to do is decode some merchandise/grocery list that's in json
+to another Haskell datatype
+
+Found a shitty product.json with not a lot of products but it'll have to do
+
+Now, I have to decode this into a [Product]
+
+Done with that
+
+So now, I've a list of places and a list of products
+
+Now I have to create two kinds of routes - standard and actual routes
+
+Man, trying to understand quickcheck Generator stuff is hard. I've been reading
+for a while now and I still don't get it!
+
+How about we try again tomorrow?
+
+I think I've got a better understanding of the generator crap now
+
+Let's see, what do we have to do again?
+
+I have to create random Trip
+
+So, some amount of success in creating a random Trip
+
+But I've got two things to do
+
+First, I've passed a small list of products and places, I need to make it the
+whole big json products and places things
+
+Next I also have to take care of making a random list of merchandise with
+random quantities
+
+Let's just do random list of merchandise first and then we'll get to the
+quantities part, which will be easier
+
+I can now successfully generate random trips such that they do not contain
+an empty list of merchandise
+
+The next thing I need to do is to work on random route generation and one
+important thing is that I need to make sure of is that the fromCity of the
+next trip is the same as the toCity of the previous trip in a route
+
+I don't think the predicate I've written to enforce the above property is fully
+correct, let's test it a bit more and also, gotta start thinking about how I
+need to fix the merchandise in each subsequent list of merchandises in trips of
+a route
+
+Okay, so the way I am trying to generate routes is kinda not working - I think
+I know what is happening. Since the trip generation is too general, the
+predicate matching for Route Generation is taking too long and it's really
+slowing things down. A better way to do this would be to use the random trip
+as a seed and to go from there. Have a random trip generated, then generate
+random places as the next toCity, and also, have another generator for either
+adding more merchandise to the current trip or subtracting merchandise. Repeat
+that for creating more trips and that's a route
+
+Right, so that worked. I was able to create a standard route with all of those
+properties - (i) smarter nextToCity generation (ii) smarter merchandise changes
+
+Now, what I gotta do is create respective actual routes, to create an actual
+route what are the things that can be changed by the driver? Let's just write
+down all the possibilities and then we can talk to Timo to see which ones we'll
+actually go with
+     1) He changes the fromCity of a trip already in our route
+     	(does that change the previous trips' toCity?)
+     2) He changes an existing toCity, but this changes the next fromCity
+     3) He changes some of the merchandise in an existing trip
+     	1) All of the existing merchandise remain as is, but he adds more merch
+	2) Strictly lesser amount of merch with no extra
+	3) Some lesser merch, with some extra
+     4) A new trip is added to the route, like 2, this would also change the
+     	next fromCity
+
