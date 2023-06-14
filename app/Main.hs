@@ -9,9 +9,10 @@ import qualified Data.ByteString.Lazy as B
 import Test.QuickCheck
 import Test.QuickCheck.Gen (Gen(unGen))
 import Test.QuickCheck.Random (mkQCGen)
+import System.Environment
 
-data Place = Place { city :: String } deriving (Eq, Show, Generic)
-data Product = Product { title :: String } deriving (Eq, Show, Generic)
+newtype Place = Place { city :: String } deriving (Eq, Show, Generic)
+newtype Product = Product { title :: String } deriving (Eq, Show, Generic)
 type Places   = [Place]
 type Products = [Product]
 
@@ -20,7 +21,7 @@ data Trip = Trip { fromCity    :: Place
                  , merchandise :: [(Product, Int)] } deriving (Eq, Show, Generic)
 
 newtype Route  = Route { theRoute :: [Trip] } deriving (Eq, Show, Generic)
-data RoutePair = RoutePair { standardRoute :: Route 
+data RoutePair = RoutePair { standardRoute :: Route
                            , actualRoute   :: Route } deriving (Eq, Show, Generic)
 
 instance FromJSON Place
@@ -29,6 +30,7 @@ instance ToJSON Place
 instance ToJSON Product
 instance ToJSON Trip
 instance ToJSON Route
+instance ToJSON RoutePair
 
 placesJsonFile :: FilePath
 placesJsonFile = "places.json"
@@ -37,10 +39,10 @@ productsJsonFile :: FilePath
 productsJsonFile = "products.json"
 
 testRouteJsonFile :: FilePath
-testRouteJsonFile = "testRoute.json"
+testRouteJsonFile = "RoutePairs.json"
 
-createTest :: [Route] -> IO ()
-createTest = encodeFile testRouteJsonFile
+createRoutePairs :: [RoutePair] -> IO ()
+createRoutePairs = encodeFile testRouteJsonFile
 
 getPlacesJSON :: IO B.ByteString
 getPlacesJSON = B.readFile placesJsonFile
@@ -168,22 +170,21 @@ generateRoutePair pls prs = do
   actRoute <- generateActualRoute pls prs stdRoute
   return $ RoutePair stdRoute actRoute
 
-randomRoutePair :: Int -> IO RoutePair
-randomRoutePair seed = do
+randomRoutePairs :: [Int] -> IO [RoutePair]
+randomRoutePairs []       = return []
+randomRoutePairs (x : xs) = do
   (pls, prs) <- getPlacesAndProducts
-  return $ unGen (generateRoutePair pls prs) (mkQCGen seed) 5
+  rest <- randomRoutePairs xs
+  return $ unGen (generateRoutePair pls prs) (mkQCGen x) 5 : rest
 
 main :: IO ()
 main = do
-  dpl <- (eitherDecode <$> getPlacesJSON) :: IO (Either String [Place])
-  dpr <- (eitherDecode <$> getProductsJSON) :: IO (Either String [Product])
-  case (dpl, dpr) of
-    (Left e1, Left e2)     -> putStrLn (e1 ++ e2)
-    (Left e1, _)           -> putStrLn e1
-    (_, Left e2)           -> putStrLn e2
-    (Right pls, Right prs) -> do
-                                print pls
-                                print prs
+  print "cabal run RouteGen -- <n - number of RoutePairs you want generated>"
+  n <- getArgs
+  let n' = read (head n) :: Int
+  let seeds = [0..n']
+  rps <- randomRoutePairs seeds
+  createRoutePairs rps
 
 {-
 testRoute1 = Route [Trip {fromCity = Place {city = "ChennaiHAHA"}, toCity = Place {city = "Houten"}, merchandise = [(Product {title = "Green smoothie"},57),(Product {title = "Baking cake"},394),(Product {title = "Homemade bread"},84),(Product {title = "Healthy breakfast"},361),(Product {title = "Green beans"},89)]},Trip {fromCity = Place {city = "Houten"}, toCity = Place {city = "Bolnes"}, merchandise = [(Product {title = "Green smoothie"},57),(Product {title = "Homemade bread"},84),(Product {title = "Healthy breakfast"},361),(Product {title = "Brown eggs"},59),(Product {title = "Lemon and salt"},157)]},Trip {fromCity = Place {city = "Bolnes"}, toCity = Place {city = "Hoensbroek"}, merchandise = [(Product {title = "Homemade bread"},84),(Product {title = "Brown eggs"},59),(Product {title = "Lemon and salt"},157),(Product {title = "Sweet fresh stawberry"},90),(Product {title = "Hazelnut in black ceramic bowl"},392),(Product {title = "Legums"},392)]},Trip {fromCity = Place {city = "Hoensbroek"}, toCity = Place {city = "Wageningen"}, merchandise = [(Product {title = "Brown eggs"},59),(Product {title = "Lemon and salt"},157),(Product {title = "Hazelnut in black ceramic bowl"},392),(Product {title = "Legums"},392)]},Trip {fromCity = Place {city = "Wageningen"}, toCity = Place {city = "Kwintsheul"}, merchandise = [(Product {title = "Lemon and salt"},157),(Product {title = "Legums"},392)]},Trip {fromCity = Place {city = "Kwintsheul"}, toCity = Place {city = "Waalre"}, merchandise = [(Product {title = "Legums"},392)]},Trip {fromCity = Place {city = "Waalre"}, toCity = Place {city = "Brunssum"}, merchandise = [(Product {title = "Legums"},392)]},Trip {fromCity = Place {city = "Brunssum"}, toCity = Place {city = "Surhuisterveen"}, merchandise = [(Product {title = "Legums"},392)]}]
