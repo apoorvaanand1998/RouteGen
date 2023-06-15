@@ -18,7 +18,7 @@ type Products = [Product]
 
 data Trip = Trip { fromCity    :: Place
                  , toCity      :: Place
-                 , merchandise :: [(Product, Int)] } deriving (Eq, Show, Generic)
+                 , tmerchandise :: [(Product, Int)] } deriving (Eq, Show, Generic)
 
 newtype Route  = Route { theRoute :: [Trip] } deriving (Eq, Show, Generic)
 data RoutePair = RoutePair { standardRoute :: Route
@@ -27,11 +27,14 @@ data RoutePair = RoutePair { standardRoute :: Route
 data SimpleRoutePair = SimpleRoutePair { stdRoute :: SimpleRoute
                                        , actRoute :: SimpleRoute } deriving (Eq, Show, Generic)
 
-newtype SimpleRoute = SimpleRoute { route :: [SimpleTrip]} deriving (Eq, Show, Generic)
+newtype SimpleRoute = SimpleRoute { sroute :: [SimpleTrip]} deriving (Eq, Show, Generic)
 
-data SimpleTrip = SimpleTrip { fromPlace :: String
-                             , toPlace   :: String
-                             , merch     :: [(String, Int)] } deriving (Eq, Show, Generic)
+data SimpleTrip = SimpleTrip { from :: String
+                             , to   :: String
+                             , merchandise :: [(String, Int)] } deriving (Eq, Show, Generic)
+
+data ProjectRoute = ProjectRoute { id    :: Integer
+                                 , route :: [SimpleTrip] } deriving (Eq, Show, Generic)
 
 instance FromJSON Place
 instance FromJSON Product
@@ -43,6 +46,7 @@ instance ToJSON RoutePair
 instance ToJSON SimpleRoutePair
 instance ToJSON SimpleRoute 
 instance ToJSON SimpleTrip
+instance ToJSON ProjectRoute
 
 placesJsonFile :: FilePath
 placesJsonFile = "places.json"
@@ -50,11 +54,17 @@ placesJsonFile = "places.json"
 productsJsonFile :: FilePath
 productsJsonFile = "products.json"
 
-testRouteJsonFile :: String -> FilePath
-testRouteJsonFile suffix = "RoutePairs/RoutePairs.json" ++ suffix
+standardJsonFile :: String -> FilePath
+standardJsonFile suffix = "RoutePairs/standard" ++ suffix ++ ".json"
 
-createRoutePairs :: String -> [SimpleRoutePair] -> IO ()
-createRoutePairs s = encodeFile (testRouteJsonFile s)
+actualJsonFile :: String -> FilePath
+actualJsonFile suffix = "RoutePairs/actual" ++ suffix ++ ".json"
+
+createStd :: String -> [ProjectRoute] -> IO ()
+createStd s = encodeFile (standardJsonFile s)
+
+createAct :: String -> [ProjectRoute] -> IO ()
+createAct s = encodeFile (actualJsonFile s)
 
 getPlacesJSON :: IO B.ByteString
 getPlacesJSON = B.readFile placesJsonFile
@@ -80,7 +90,7 @@ generateRandomTrip pls prs = do
   merchPs <- suchThat (sublistOf prs) (not . null)
   merchQs <- listOf1 (choose (1, 420 :: Int))
   let merchs = zip merchPs merchQs
-  let randomTrip = Trip { fromCity = pls !! fromIdx, toCity = pls !! toIdx, merchandise = merchs}
+  let randomTrip = Trip { fromCity = pls !! fromIdx, toCity = pls !! toIdx, tmerchandise = merchs}
   return randomTrip
 
 generateRandomPlace :: Places -> Places -> Gen (Place, Places)
@@ -96,9 +106,9 @@ generateNextTrip pls prs alreadyPlaces seedTrip = do
   merchPs <- suchThat (sublistOf prs) (not . null)
   merchQs <- listOf1 (choose (1, 420 :: Int))
   let merchs = zip merchPs merchQs
-  let prevMerch = merchandise seedTrip
+  let prevMerch = tmerchandise seedTrip
   merchs' <- oneof [suchThat (sublistOf prevMerch) (not . null), suchThat (sublistOf (prevMerch ++ merchs)) (not . null) ]
-  let nextTrip = Trip { fromCity = toCity seedTrip, toCity = nextToCity, merchandise = merchs'}
+  let nextTrip = Trip { fromCity = toCity seedTrip, toCity = nextToCity, tmerchandise = merchs'}
   return (nextTrip, alreadyPlaces'')
 
 generateStandardRoute :: Places -> Products -> Gen Route
@@ -149,7 +159,7 @@ generateActualRoute pls prs stdRoute = do
     changeMerch []       r = return r
     changeMerch (x : xs) r = do
       let trip  = theRoute r !! x
-          m     = merchandise trip
+          m     = tmerchandise trip
           asIs  = return m :: Gen [(Product, Int)]
       merchPs <- suchThat (sublistOf prs) (not . null)
       merchQs <- listOf1 (choose (1, 420 :: Int))
@@ -158,7 +168,7 @@ generateActualRoute pls prs stdRoute = do
           someOfPrev   = suchThat (sublistOf m) (not . null)
           mix          = suchThat (sublistOf (m ++ extraM)) (not . null)
       poss <- oneof [asIs, strictlyMore, someOfPrev, mix]
-      let trip' = trip { merchandise = poss }
+      let trip' = trip { tmerchandise = poss }
           r'    = Route $ changeAt x trip' (theRoute r)
       changeMerch xs r'
 
@@ -208,6 +218,17 @@ convertRP rp =
   in
     SimpleRoutePair sts sta
   
+convertSRP :: Integer -> [SimpleRoutePair] -> ([ProjectRoute], [ProjectRoute])
+convertSRP _ []             = ([], [])
+convertSRP startId (x : xs) = 
+  let
+    spr    = sroute $ stdRoute x
+    apr    = sroute $ actRoute x
+    (f, s) = convertSRP (startId+1) xs
+    currF  = ProjectRoute startId spr
+    currS  = ProjectRoute startId apr
+  in
+    (currF : f, currS : s)
 
 main :: IO ()
 main = do
@@ -215,15 +236,10 @@ main = do
   (startSeed : endSeed : filePathSuffix : _) <- getArgs
   let i = read startSeed :: Int
       j = read endSeed   :: Int
+      k = read filePathSuffix :: Integer
   let seeds = [i..j]
   rps <- randomRoutePairs seeds
-  let srps = map convertRP rps
-  createRoutePairs filePathSuffix srps
-
-{-
-testRoute1 = Route [Trip {fromCity = Place {city = "ChennaiHAHA"}, toCity = Place {city = "Houten"}, merchandise = [(Product {title = "Green smoothie"},57),(Product {title = "Baking cake"},394),(Product {title = "Homemade bread"},84),(Product {title = "Healthy breakfast"},361),(Product {title = "Green beans"},89)]},Trip {fromCity = Place {city = "Houten"}, toCity = Place {city = "Bolnes"}, merchandise = [(Product {title = "Green smoothie"},57),(Product {title = "Homemade bread"},84),(Product {title = "Healthy breakfast"},361),(Product {title = "Brown eggs"},59),(Product {title = "Lemon and salt"},157)]},Trip {fromCity = Place {city = "Bolnes"}, toCity = Place {city = "Hoensbroek"}, merchandise = [(Product {title = "Homemade bread"},84),(Product {title = "Brown eggs"},59),(Product {title = "Lemon and salt"},157),(Product {title = "Sweet fresh stawberry"},90),(Product {title = "Hazelnut in black ceramic bowl"},392),(Product {title = "Legums"},392)]},Trip {fromCity = Place {city = "Hoensbroek"}, toCity = Place {city = "Wageningen"}, merchandise = [(Product {title = "Brown eggs"},59),(Product {title = "Lemon and salt"},157),(Product {title = "Hazelnut in black ceramic bowl"},392),(Product {title = "Legums"},392)]},Trip {fromCity = Place {city = "Wageningen"}, toCity = Place {city = "Kwintsheul"}, merchandise = [(Product {title = "Lemon and salt"},157),(Product {title = "Legums"},392)]},Trip {fromCity = Place {city = "Kwintsheul"}, toCity = Place {city = "Waalre"}, merchandise = [(Product {title = "Legums"},392)]},Trip {fromCity = Place {city = "Waalre"}, toCity = Place {city = "Brunssum"}, merchandise = [(Product {title = "Legums"},392)]},Trip {fromCity = Place {city = "Brunssum"}, toCity = Place {city = "Surhuisterveen"}, merchandise = [(Product {title = "Legums"},392)]}]
-testRoute2 = Route [Trip {fromCity = Place {city = "Badhoevedorp"}, toCity = Place {city = "Landgraaf"}, merchandise = [(Product {title = "Brown eggs"},178),(Product {title = "Sweet fresh stawberry"},18),(Product {title = "Asparagus"},408),(Product {title = "Green smoothie"},255),(Product {title = "Raw legums"},62)]},Trip {fromCity = Place {city = "Landgraaf"}, toCity = Place {city = "Berghem"}, merchandise = [(Product {title = "Sweet fresh stawberry"},18),(Product {title = "Asparagus"},408),(Product {title = "Green smoothie"},255),(Product {title = "Raw legums"},62),(Product {title = "Green smoothie"},317),(Product {title = "Raw legums"},190),(Product {title = "Pesto with basil"},138)]},Trip {fromCity = Place {city = "Berghem"}, toCity = Place {city = "Rijsenhout"}, merchandise = [(Product {title = "Green smoothie"},255),(Product {title = "Raw legums"},62),(Product {title = "Pesto with basil"},138)]},Trip {fromCity = Place {city = "Rijsenhout"}, toCity = Place {city = "Zuid-Scharwoude"}, merchandise = [(Product {title = "Green smoothie"},255)]},Trip {fromCity = Place {city = "Zuid-Scharwoude"}, toCity = Place {city = "Amersfoort"}, merchandise = [(Product {title = "Green smoothie"},255)]},Trip {fromCity = Place {city = "Amersfoort"}, toCity = Place {city = "Heer"}, merchandise = [(Product {title = "Green smoothie"},255)]},Trip {fromCity = Place {city = "Heer"}, toCity = Place {city = "Huissen"}, merchandise = [(Product {title = "Green smoothie"},255),(Product {title = "Pesto with basil"},204)]},Trip {fromCity = Place {city = "Huissen"}, toCity = Place {city = "Nieuwegein"}, merchandise = [(Product {title = "Green smoothie"},169),(Product {title = "Raw legums"},411)]},Trip {fromCity = Place {city = "Nieuwegein"}, toCity = Place {city = "Goutum"}, merchandise = [(Product {title = "Green smoothie"},169),(Product {title = "Raw legums"},411)]},Trip {fromCity = Place {city = "Goutum"}, toCity = Place {city = "Kerkrade"}, merchandise = [(Product {title = "Raw legums"},411),(Product {title = "Raw legums"},385)]},Trip {fromCity = Place {city = "Kerkrade"}, toCity = Place {city = "Vleuten"}, merchandise = [(Product {title = "Raw legums"},385)]}]
-testRoute3 = Route [Trip {fromCity = Place {city = "Zwolle"}, toCity = Place {city = "Uithoorn"}, merchandise = [(Product {title = "Sweet fresh stawberry"},19),(Product {title = "Asparagus"},420),(Product {title = "Green smoothie"},39),(Product {title = "Raw legums"},64)]},Trip {fromCity = Place {city = "Uithoorn"}, toCity = Place {city = "Utrecht"}, merchandise = [(Product {title = "Sweet fresh stawberry"},19),(Product {title = "Asparagus"},420),(Product {title = "Green smoothie"},39)]},Trip {fromCity = Place {city = "Utrecht"}, toCity = Place {city = "Lelystad"}, merchandise = [(Product {title = "Sweet fresh stawberry"},19),(Product {title = "Asparagus"},420),(Product {title = "Green smoothie"},39)]},Trip {fromCity = Place {city = "Lelystad"}, toCity = Place {city = "Tilburg"}, merchandise = [(Product {title = "Sweet fresh stawberry"},19),(Product {title = "Green smoothie"},39)]},Trip {fromCity = Place {city = "Tilburg"}, toCity = Place {city = "Empel"}, merchandise = [(Product {title = "Sweet fresh stawberry"},19),(Product {title = "Green smoothie"},39)]},Trip {fromCity = Place {city = "Empel"}, toCity = Place {city = "\8217s-Gravenzande"}, merchandise = [(Product {title = "Sweet fresh stawberry"},19),(Product {title = "Green smoothie"},39),(Product {title = "Hazelnut in black ceramic bowl"},21),(Product {title = "Fresh stawberry"},232),(Product {title = "Homemade bread"},408)]},Trip {fromCity = Place {city = "\8217s-Gravenzande"}, toCity = Place {city = "Nieuwegein"}, merchandise = [(Product {title = "Sweet fresh stawberry"},19),(Product {title = "Green smoothie"},39),(Product {title = "Hazelnut in black ceramic bowl"},21)]},Trip {fromCity = Place {city = "Nieuwegein"}, toCity = Place {city = "Weesp"}, merchandise = [(Product {title = "Sweet fresh stawberry"},292)]},Trip {fromCity = Place {city = "Weesp"}, toCity = Place {city = "Beek"}, merchandise = [(Product {title = "Sweet fresh stawberry"},292),(Product {title = "Brown eggs"},157)]}]
-
-testRoutes = [testRoute1, testRoute2, testRoute3]
--}
+  let srps         = map convertRP rps
+      (stds, acts) = convertSRP k srps
+  createStd filePathSuffix stds
+  createAct filePathSuffix acts
